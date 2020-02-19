@@ -56,7 +56,6 @@ proc newPlotData(x:openArray[SomeNumber],y:openArray[SomeNumber]):PlotData =
   while filename.existsFile:
     filename="nim-gnuplot-" & ($num) & ".dat"
     num=num+1
-  var pd:PlotData
   result.new(proc(self:PlotData) =
     self.file.removeFile)
   result.x=xData
