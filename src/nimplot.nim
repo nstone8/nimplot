@@ -12,8 +12,6 @@ type
     process:Process
     input:Stream
   PlotData = ref object
-    x:seq[float]
-    y:seq[float]
     file:string
 
 proc sendCommand(p:Plotter,cmd:string) =
@@ -40,34 +38,47 @@ proc newPlotter*():Plotter =
 proc close(p:Plotter) =
   p.process.close
     
-proc newPlotData(x:openArray[SomeNumber],y:openArray[SomeNumber]):PlotData =
-  if x.len != y.len:
-    raise newException(ImproperInputError,"X data and Y data must be of the same length")
-  var xData:seq[float]
-  var yData:seq[float]
-  xData.newSeq(x.len)
-  yData.newSeq(y.len)
-  for i in 0..<x.len:
-    xData[i]=x[i].toFloat
-    yData[i]=y[i].toFloat
-
+proc newPlotData[T:SomeNumber](data:seq[(seq[T],seq[T])]):PlotData =
+  var allSeries:seq[(seq[float],seq[float])]
+  allSeries.newSeq(data.len)
+  for i in 0..<data.len:
+    if data[i][0].len != data[i][1].len:
+      raise newException(ImproperInputError,"X data and Y data must be of the same length")
+    var
+      datalen=data[i][0].len
+      newXData:seq[float]
+      newYData:seq[float]
+    newXData.newSeq(datalen)
+    newYData.newSeq(datalen)
+    for j in data[i][0]:
+      newXData.add(j.toFloat)
+    for k in data[i][1]:
+      newYData.add(k.toFloat)
+    allSeries[i]=(newXData,newYData)  
+  
   var filename="nim-gnuplot.dat"
   var num=1
   while filename.existsFile:
     filename="nim-gnuplot-" & ($num) & ".dat"
     num=num+1
+
+  let myFile=filename.open(fmWrite)
+  for series in allSeries:
+    for i in 0..<series[0].len:
+      myFile.writeLine($(series[0][i]) & "\t" & $(series[1][i]))
+    myFile.writeLine("")
+      
   result.new(proc(self:PlotData) =
     self.file.removeFile)
-  result.x=xData
-  result.y=yData
   result.file=filename
-  let myFile=filename.open(fmWrite)
-  for i in 0..<x.len:
-    myFile.writeLine($(x[i]) & "\t" & $(y[i]))
+
   myFile.close
 
-proc scatter*(p:Plotter,x:openArray[SomeNumber],y:openArray[SomeNumber]) =
-  var pd=newPlotData(x,y)
+proc scatter*[T:SomeNumber](p:Plotter,data:varargs[(seq[T],seq[T])]) =
+  var toPass:seq[(seq[T],seq[T])] = @[]
+  for d in data:
+    toPass.add(d)
+  var pd=newPlotData(toPass)
   p.sendCommand("plot "&"\""&pd.file&"\"")
   
 proc linspace*(first:float,last:float,numPoints:int):seq[float] =
