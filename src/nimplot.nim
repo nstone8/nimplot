@@ -3,6 +3,19 @@ import osproc
 import streams
 import strutils
 
+const defaultColors=[
+    "#1f77b4",  # muted blue
+    "#ff7f0e",  # safety orange
+    "#2ca02c",  # cooked asparagus green
+    "#d62728",  # brick red
+    "#9467bd",  # muted purple
+    "#8c564b",  # chestnut brown
+    "#e377c2",  # raspberry yogurt pink
+    "#7f7f7f",  # middle gray
+    "#bcbd22",  # curry yellow-green
+    "#17becf"   # blue-teal
+]
+
 type
   ImproperInputError=object of CatchableError
   NoGnuPlotError=object of CatchableError
@@ -17,8 +30,6 @@ type
 proc sendCommand(p:Plotter,cmd:string) =
   p.input.writeLine(cmd)
   p.input.flush
-  
-proc toFloat(x:float):float = x
     
 proc newPlotter*():Plotter =
   var gnuplot = ""
@@ -38,48 +49,40 @@ proc newPlotter*():Plotter =
 proc close(p:Plotter) =
   p.process.close
     
-proc newPlotData[T:SomeNumber](data:seq[(seq[T],seq[T])]):PlotData =
-  var allSeries:seq[(seq[float],seq[float])]
-  allSeries.newSeq(data.len)
+proc newPlotData(data:seq[(seq[float],seq[float])]):PlotData =
   for i in 0..<data.len:
     if data[i][0].len != data[i][1].len:
       raise newException(ImproperInputError,"X data and Y data must be of the same length")
-    var
-      datalen=data[i][0].len
-      newXData:seq[float]
-      newYData:seq[float]
-    newXData.newSeq(datalen)
-    newYData.newSeq(datalen)
-    for j in data[i][0]:
-      newXData.add(j.toFloat)
-    for k in data[i][1]:
-      newYData.add(k.toFloat)
-    allSeries[i]=(newXData,newYData)  
   
   var filename="nim-gnuplot.dat"
-  var num=1
-  while filename.existsFile:
-    filename="nim-gnuplot-" & ($num) & ".dat"
-    num=num+1
 
   let myFile=filename.open(fmWrite)
-  for series in allSeries:
+  for series in data:
     for i in 0..<series[0].len:
       myFile.writeLine($(series[0][i]) & "\t" & $(series[1][i]))
-    myFile.writeLine("")
+    myFile.writeLine("\n")
       
-  result.new(proc(self:PlotData) =
-    self.file.removeFile)
+  result.new()
   result.file=filename
 
   myFile.close
 
-proc scatter*[T:SomeNumber](p:Plotter,data:varargs[(seq[T],seq[T])]) =
-  var toPass:seq[(seq[T],seq[T])] = @[]
+proc plotWrapper(p:Plotter,data:openArray[(seq[float],seq[float])],typeCommand:string) =
+  var toPass:seq[(seq[float],seq[float])] = @[]
   for d in data:
     toPass.add(d)
-  var pd=newPlotData(toPass)
-  p.sendCommand("plot "&"\""&pd.file&"\"")
+  var
+    pd=newPlotData(toPass)
+    commands="plot"
+  for i in 1..toPass.len:
+    let colorIndex=(i-1) mod defaultColors.len
+    p.sendCommand("set style line " & $i & " linecolor rgb " & "\"" & defaultColors[colorIndex] & "\"" & " ")
+    commands=commands & " \"" & pd.file&"\" index " & $(i-1) & " with " & typeCommand & " linestyle " & $i & ","
+  commands=commands[0 .. ^2]
+  p.sendCommand(commands)
+
+proc scatter*(p:Plotter,data:openArray[(seq[float],seq[float])]) =
+  plotWrapper(p,data,"points")
   
 proc linspace*(first:float,last:float,numPoints:int):seq[float] =
   let slope=(last-first)/(numPoints.toFloat-1)
